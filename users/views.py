@@ -12,8 +12,8 @@ from django.core.exceptions import ObjectDoesNotExist
 import datetime
 import json
 User = get_user_model()
-
-
+from django.utils import timezone
+from django.db.models import Q
 
 def generate_otp():
     # Generate a random secret key
@@ -128,7 +128,6 @@ class VerifyOTPView(APIView):
         elif request.session['otp'] == otp:
             # Create the user
             user = CustomUser.objects.create_user(email=email, phone_number=phone_number)
-            print(password2)
             user.set_password(password2)
             user.save()
 
@@ -197,31 +196,6 @@ class LogoutAPIView(APIView):
         })
 
 
-# class ChangePasswordAPIView(APIView):
-#     permission_classes = [IsAuthenticated]
-
-#     def get_object(self, queryset=None):
-#         return self.request.user
-
-#     def post(self, request, *args, **kwargs):
-#         self.object = self.get_object()
-#         serializer = ChangePasswordSerializer(data=request.data)
-
-#         if serializer.is_valid():
-#             # Check old password
-#             old_password = serializer.data.get("old_password")
-#             if not self.object.check_password(old_password):
-#                 return Response({"old_password": ["Wrong password."]}, 
-#                                 status=status.HTTP_400_BAD_REQUEST)
-#             # set_password also hashes the password that the user will get
-#             self.object.set_password(serializer.data.get("new_password"))
-#             self.object.save()
-#             return Response(status=status.HTTP_204_NO_CONTENT)
-
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
 class ChangePasswordAPIView(APIView):
     permission_classes = [IsAuthenticated]
     # authentication_classes = [JWTAuthentication]
@@ -238,3 +212,97 @@ class ChangePasswordAPIView(APIView):
                 return Response({'error': 'Wrong password.'}, status=status.HTTP_400_BAD_REQUEST)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+
+
+class ResetPasswordOTPAPIView(APIView):
+    serializer_class = ResetPasswordOTPSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone_or_email = serializer.validated_data['phone_or_email']
+        media = serializer.validated_data['media']
+
+        if media == 'email':
+            user = CustomUser.objects.filter(email=phone_or_email).first()
+            if user:
+                # Generate and save OTP for the user
+                otp_secret, otp = generate_otp()
+                user.otp_secret = otp_secret
+                user.otp = otp
+                user.otp_expire_time = timezone.now() + datetime.timedelta(minutes=5)
+                user.save()
+
+                # Send OTP via email
+                send_otp_via_email(user.email, otp)
+
+                return Response({'success': 'OTP has been sent to your email.'}, status=status.HTTP_200_OK)
+
+        elif media == 'phone':
+            user = CustomUser.objects.filter(phone_number=phone_or_email).first()
+            if user:
+                # Generate and save OTP for the user
+                otp_secret, otp = generate_otp()
+                user.otp_secret = otp_secret
+                user.otp = otp
+                user.otp_expire_time = timezone.now() + datetime.timedelta(minutes=5)
+                user.save()
+
+                # Send OTP via SMS (using Twilio or other service)
+                # send_otp_via_sms(user.phone_number, otp)
+
+                return Response({'success': 'OTP has been sent to your phone.'}, status=status.HTTP_200_OK)
+
+        raise serializers.ValidationError('User not found.')
+
+
+class VerifyOTPAPIView(APIView):
+    serializer_class = VerifyOTPSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone_or_email = serializer.validated_data['phone_or_email']
+        otp = serializer.validated_data['otp']
+
+        user = CustomUser.objects.filter(Q(email=phone_or_email) | Q(phone_number=phone_or_email)).first()
+        if not user:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.otp != otp:
+            return Response({'error': 'Invalid OTP.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user.otp_expire_time < timezone.now():
+            return Response({'error': 'OTP expired.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # If OTP is valid and not expired, reset the password
+        # Reset the OTP and OTP expire time
+        user.otp = None
+        user.otp_expire_time = None
+        user.save()
+
+        return Response({'message': 'OTP has been verified.'}, status=status.HTTP_200_OK)
+
+
+
+class ResetPasswordAPIView(APIView):
+    serializer_class = ResetPasswordSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone_or_email = serializer.validated_data['phone_or_email']
+        password = serializer.validated_data['password']
+
+        user = CustomUser.objects.filter(Q(email=phone_or_email) | Q(phone_number=phone_or_email)).first()
+        if not user:
+             return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        user.set_password(password)
+        user.save()
+
+        return Response({'message': 'Password has been reset successfully.'}, status=status.HTTP_200_OK)

@@ -12,7 +12,7 @@ class SignupSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ('full_name', 'email', 'date_of_birth', 'phone_number', 
-                  'corporation_name', 'corporation_number', 'is_user', 
+                  'corporation_name', 'corporation_number', 
                   'is_professional', 'password', 'password2')
 
     def validate(self, attrs):
@@ -59,3 +59,22 @@ class ChangePasswordSerializer(serializers.Serializer):
         if data['new_password'] != data['confirm_password']:
             raise serializers.ValidationError("The new password and confirm password do not match.")
         return data
+    
+
+class ResetPasswordOTPSerializer(serializers.Serializer):
+    MEDIA_CHOICES = (
+        ('email', 'Email'),
+        ('phone', 'Phone')
+    )
+    phone_or_email = serializers.CharField(required=True)
+    media = serializers.ChoiceField(choices=MEDIA_CHOICES, required=True)
+
+
+class VerifyOTPSerializer(serializers.Serializer):
+    phone_or_email = serializers.CharField(required=True)
+    otp = serializers.CharField(required=True)
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    phone_or_email = serializers.CharField(required=True)
+    password = serializers.CharField(required=True)

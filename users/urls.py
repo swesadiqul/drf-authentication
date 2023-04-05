@@ -18,5 +18,8 @@ urlpatterns = [
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
+    path('reset-password-otp/', ResetPasswordOTPAPIView.as_view(), name='reset-password-otp'),
+    path('verify-reset-otp/', VerifyOTPAPIView.as_view(), name='verify-reset-otp'),
+    path('reset-password/', ResetPasswordAPIView.as_view(), name='reset-password'),
 
 ]
